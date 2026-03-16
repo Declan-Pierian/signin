@@ -4,6 +4,39 @@ import { getRequestDetail, sendReminder, recallRequest, getDownloadUrl, getCerti
 import StatusBadge from '../components/StatusBadge';
 import SignerProgress from '../components/SignerProgress';
 
+function InfoItem({ label, value, mono }) {
+  return (
+    <div>
+      <dt className="text-xs font-medium text-ink-400 uppercase tracking-wider mb-1">{label}</dt>
+      <dd className={`text-sm text-ink-900 ${mono ? 'font-mono text-xs bg-surface-50 px-2 py-1 rounded-md inline-block' : ''}`}>
+        {value || '\u2014'}
+      </dd>
+    </div>
+  );
+}
+
+function SkeletonDetail() {
+  return (
+    <div className="max-w-3xl mx-auto space-y-6 animate-pulse">
+      <div className="h-6 w-32 shimmer-bg rounded animate-shimmer" />
+      <div className="h-8 w-72 shimmer-bg rounded animate-shimmer" />
+      <div className="section-card p-8 space-y-4">
+        <div className="h-4 w-40 shimmer-bg rounded animate-shimmer" />
+        <div className="h-3 w-full shimmer-bg rounded-full animate-shimmer" />
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex items-center gap-4 p-3">
+            <div className="w-10 h-10 shimmer-bg rounded-full animate-shimmer" />
+            <div className="flex-1 space-y-2">
+              <div className="h-4 w-32 shimmer-bg rounded animate-shimmer" />
+              <div className="h-3 w-48 shimmer-bg rounded animate-shimmer" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function RequestDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -53,20 +86,30 @@ export default function RequestDetail() {
     }
   };
 
-  if (loading) {
-    return <div className="text-center py-12 text-gray-500">Loading request details...</div>;
-  }
+  if (loading) return <SkeletonDetail />;
 
   if (error) {
     return (
-      <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
-        {error}
+      <div className="max-w-3xl mx-auto">
+        <div className="section-card overflow-hidden animate-scale-in">
+          <div className="h-1 bg-gradient-to-r from-red-400 to-red-500" />
+          <div className="p-6 text-center">
+            <p className="text-red-700 font-medium">{error}</p>
+            <button onClick={() => navigate('/dashboard')} className="btn-secondary mt-4 text-sm">
+              Back to Dashboard
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (!request) {
-    return <div className="text-center py-12 text-gray-500">Request not found.</div>;
+    return (
+      <div className="max-w-3xl mx-auto text-center py-20">
+        <p className="text-ink-400">Request not found.</p>
+      </div>
+    );
   }
 
   const isCompleted = request.request_status === 'completed';
@@ -74,108 +117,125 @@ export default function RequestDetail() {
   const actions = request.actions || [];
   const signActions = actions.filter((a) => a.action_type === 'SIGN');
   const signed = signActions.filter((a) => a.action_status === 'SIGNED').length;
+  const pct = signActions.length > 0 ? (signed / signActions.length) * 100 : 0;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="text-sm text-indigo-600 hover:underline mb-2 inline-block"
-          >
-            &larr; Back to Dashboard
-          </button>
-          <h1 className="text-2xl font-bold text-gray-900">{request.request_name}</h1>
+    <div className="max-w-3xl mx-auto space-y-6 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
+      {/* Back + Header */}
+      <div>
+        <button
+          onClick={() => navigate('/dashboard')}
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-400 hover:text-brand-600 transition-colors mb-4 group"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="transition-transform group-hover:-translate-x-0.5">
+            <path d="M10 3l-5 5 5 5" />
+          </svg>
+          Dashboard
+        </button>
+
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-ink-900 tracking-tight">{request.request_name}</h1>
+            {request.notes && (
+              <p className="text-sm text-ink-400 mt-1">{request.notes}</p>
+            )}
+          </div>
+          <StatusBadge status={request.request_status} size="lg" />
         </div>
-        <StatusBadge status={request.request_status} />
       </div>
 
-      {/* Progress summary */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-lg font-semibold text-gray-800 mb-2">Signing Progress</h2>
-        <p className="text-sm text-gray-600 mb-4">
-          {signed} of {signActions.length} signers completed
-        </p>
+      {/* Progress Card */}
+      <div className="section-card p-6 sm:p-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold text-ink-900">Signing Progress</h2>
+          <span className="text-sm font-medium text-ink-500">
+            {signed} of {signActions.length} signed
+          </span>
+        </div>
 
         {/* Progress bar */}
-        <div className="w-full bg-gray-200 rounded-full h-2.5 mb-6">
+        <div className="w-full bg-surface-200 rounded-full h-2 mb-8 overflow-hidden">
           <div
-            className="bg-indigo-600 h-2.5 rounded-full transition-all"
-            style={{ width: `${signActions.length > 0 ? (signed / signActions.length) * 100 : 0}%` }}
+            className={`h-2 rounded-full transition-all duration-1000 ease-out ${
+              pct >= 100
+                ? 'bg-gradient-to-r from-emerald-400 to-emerald-500'
+                : 'bg-gradient-to-r from-brand-400 to-brand-600'
+            }`}
+            style={{ width: `${pct}%` }}
           />
         </div>
 
         <SignerProgress actions={actions} />
       </div>
 
-      {/* Request info */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-lg font-semibold text-gray-800 mb-3">Request Info</h2>
-        <dl className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <dt className="text-gray-500">Request ID</dt>
-            <dd className="font-mono text-gray-900">{request.request_id}</dd>
-          </div>
-          <div>
-            <dt className="text-gray-500">Created</dt>
-            <dd className="text-gray-900">
-              {request.created_time ? new Date(request.created_time).toLocaleString() : '—'}
-            </dd>
-          </div>
+      {/* Request Info Card */}
+      <div className="section-card p-6 sm:p-8">
+        <h2 className="text-base font-semibold text-ink-900 mb-5">Request Details</h2>
+        <dl className="grid grid-cols-2 gap-5">
+          <InfoItem label="Request ID" value={request.request_id} mono />
+          <InfoItem
+            label="Created"
+            value={request.created_time ? new Date(request.created_time).toLocaleString('en-IN', {
+              day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+            }) : null}
+          />
           {request.expiration_days && (
-            <div>
-              <dt className="text-gray-500">Expiration</dt>
-              <dd className="text-gray-900">{request.expiration_days} days</dd>
-            </div>
-          )}
-          {request.notes && (
-            <div className="col-span-2">
-              <dt className="text-gray-500">Notes</dt>
-              <dd className="text-gray-900">{request.notes}</dd>
-            </div>
+            <InfoItem label="Expires in" value={`${request.expiration_days} days`} />
           )}
         </dl>
       </div>
 
-      {/* Actions */}
-      <div className="flex flex-wrap gap-3">
-        {isInProgress && (
-          <>
-            <button
-              onClick={handleRemind}
-              disabled={actionLoading === 'remind'}
-              className="px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 disabled:opacity-50 text-sm font-medium"
-            >
-              {actionLoading === 'remind' ? 'Sending...' : 'Send Reminder'}
-            </button>
-            <button
-              onClick={handleRecall}
-              disabled={actionLoading === 'recall'}
-              className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 disabled:opacity-50 text-sm font-medium"
-            >
-              {actionLoading === 'recall' ? 'Cancelling...' : 'Recall / Cancel'}
-            </button>
-          </>
-        )}
+      {/* Action Buttons */}
+      {(isInProgress || isCompleted) && (
+        <div className="flex flex-wrap gap-3 animate-fade-in-up opacity-0" style={{ animationDelay: '0.2s', animationFillMode: 'forwards' }}>
+          {isInProgress && (
+            <>
+              <button
+                onClick={handleRemind}
+                disabled={actionLoading === 'remind'}
+                className="btn-secondary"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <path d="M8 2a4.5 4.5 0 0 1 4.5 4.5c0 2-.5 3.5-1.5 5h-6c-1-1.5-1.5-3-1.5-5A4.5 4.5 0 0 1 8 2z" />
+                  <path d="M6 13.5a2 2 0 0 0 4 0" />
+                </svg>
+                {actionLoading === 'remind' ? 'Sending...' : 'Send Reminder'}
+              </button>
+              <button
+                onClick={handleRecall}
+                disabled={actionLoading === 'recall'}
+                className="btn-danger"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <circle cx="8" cy="8" r="6" />
+                  <path d="M6 6l4 4M10 6l-4 4" />
+                </svg>
+                {actionLoading === 'recall' ? 'Cancelling...' : 'Cancel Request'}
+              </button>
+            </>
+          )}
 
-        {isCompleted && (
-          <>
-            <a
-              href={getDownloadUrl(id)}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium inline-block"
-            >
-              Download Signed PDF
-            </a>
-            <a
-              href={getCertificateUrl(id)}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium inline-block"
-            >
-              Download Certificate
-            </a>
-          </>
-        )}
-      </div>
+          {isCompleted && (
+            <>
+              <a href={getDownloadUrl(id)} className="btn-success">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <path d="M8 2v9" />
+                  <path d="M4.5 8L8 11.5 11.5 8" />
+                  <path d="M3 14h10" />
+                </svg>
+                Download Signed PDF
+              </a>
+              <a href={getCertificateUrl(id)} className="btn-secondary">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <rect x="2" y="2" width="12" height="12" rx="2" />
+                  <path d="M5 6h6M5 9h4" />
+                </svg>
+                Download Certificate
+              </a>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
