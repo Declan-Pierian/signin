@@ -1,112 +1,48 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { sendForSigning } from '../api/client';
 
-const FIXED_PARTIES = [
-  { name: 'Abhishek', role: 'Authorized Signatory', page: 'Page 1', type: 'SIGN' },
-  { name: 'Chetan', role: 'HR Head', page: 'Page 2', type: 'SIGN' },
-  { name: null, role: 'New Employee', page: 'Page 3', type: 'SIGN' },
-  { name: 'Jagdish', role: 'Management', page: 'Receives signed copy', type: 'VIEW' },
-];
-
-function FormField({ label, required, children }) {
-  return (
-    <div className="space-y-1.5">
-      <label className="block text-sm font-medium text-ink-700">
-        {label}
-        {required && <span className="text-red-400 ml-0.5">*</span>}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-function PartyCard({ party, index, employeeName }) {
-  const isView = party.type === 'VIEW';
-  const displayName = party.name || employeeName || 'Employee name';
-  const isEmployee = party.name === null;
-
-  return (
-    <div
-      className={`group relative flex items-center gap-4 p-4 rounded-xl border transition-all duration-300 animate-fade-in-up opacity-0 ${
-        isView
-          ? 'bg-surface-50 border-surface-200 border-dashed'
-          : 'bg-white border-surface-200 hover:border-brand-300 hover:shadow-soft'
-      }`}
-      style={{ animationDelay: `${index * 80}ms`, animationFillMode: 'forwards' }}
-    >
-      {/* Order number */}
-      <div
-        className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold transition-all duration-200 ${
-          isView
-            ? 'bg-surface-200 text-ink-400'
-            : 'bg-gradient-to-br from-brand-500 to-brand-600 text-white shadow-soft group-hover:shadow-glow'
-        }`}
-      >
-        {index + 1}
-      </div>
-
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <p className={`text-sm font-semibold ${isView ? 'text-ink-400' : 'text-ink-900'}`}>
-            {isEmployee && !employeeName ? (
-              <span className="text-ink-300 italic">Enter employee name above</span>
-            ) : (
-              displayName
-            )}
-          </p>
-          {isEmployee && employeeName && (
-            <span className="px-1.5 py-0.5 text-[10px] font-medium text-brand-600 bg-brand-50 rounded-md ring-1 ring-brand-200">
-              New joiner
-            </span>
-          )}
-        </div>
-        <p className="text-xs text-ink-400 mt-0.5">
-          {party.role} &middot; {party.page}
-        </p>
-      </div>
-
-      {/* Type badge */}
-      <div
-        className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide ${
-          isView
-            ? 'bg-surface-200 text-ink-400'
-            : 'bg-brand-50 text-brand-600 ring-1 ring-brand-200'
-        }`}
-      >
-        {isView ? 'View' : 'Sign'}
-      </div>
-    </div>
-  );
-}
-
 export default function NewRequest() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({
-    employeeName: '',
-    employeeEmail: '',
-    designation: '',
-    joiningDate: '',
-    department: '',
-  });
+  const fileInputRef = useRef(null);
+  const [file, setFile] = useState(null);
+  const [dragOver, setDragOver] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+  const handleFileDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const dropped = e.dataTransfer.files[0];
+    if (dropped && dropped.type === 'application/pdf') {
+      setFile(dropped);
+    } else {
+      setError('Please upload a PDF file');
+    }
+  };
+
+  const handleFileSelect = (e) => {
+    const selected = e.target.files[0];
+    if (selected) setFile(selected);
+  };
+
+  const removeFile = () => {
+    setFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!file) { setError('Please upload the appointment letter PDF'); return; }
     setLoading(true);
     setError(null);
     setSuccess(null);
 
     try {
-      const result = await sendForSigning(form);
+      const result = await sendForSigning({ file });
       setSuccess({ message: result.message, requestId: result.requestId });
+      setFile(null);
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     } finally {
@@ -114,12 +50,14 @@ export default function NewRequest() {
     }
   };
 
+  const fileSizeMB = file ? (file.size / (1024 * 1024)).toFixed(2) : 0;
+
   return (
     <div className="max-w-3xl mx-auto animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
       {/* Page header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-ink-900 tracking-tight">New Signing Request</h1>
-        <p className="text-ink-400 mt-1">Send an appointment letter for signing</p>
+        <p className="text-ink-400 mt-1">Upload an appointment letter and send it for signing</p>
       </div>
 
       {/* Success toast */}
@@ -169,106 +107,85 @@ export default function NewRequest() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Employee Details Card */}
+        {/* Upload Card */}
         <div className="section-card p-6 sm:p-8">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-brand-600">
-                <circle cx="8" cy="5" r="3" />
-                <path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-brand-600" strokeLinecap="round">
+                <path d="M14 10v3a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-3" />
+                <path d="M8 10V2" />
+                <path d="M4.5 5.5L8 2l3.5 3.5" />
               </svg>
             </div>
-            <h2 className="text-base font-semibold text-ink-900">Employee Details</h2>
+            <h2 className="text-base font-semibold text-ink-900">Appointment Letter</h2>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <FormField label="Full Name" required>
+          {!file ? (
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleFileDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`relative cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center transition-all duration-200 ${
+                dragOver
+                  ? 'border-brand-400 bg-brand-50/50'
+                  : 'border-surface-300 hover:border-brand-300 hover:bg-surface-50'
+              }`}
+            >
               <input
-                type="text"
-                name="employeeName"
-                value={form.employeeName}
-                onChange={handleChange}
-                required
-                className="input-field"
-                placeholder="e.g. Rahul Sharma"
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf"
+                onChange={handleFileSelect}
+                className="hidden"
               />
-            </FormField>
-            <FormField label="Email Address" required>
-              <input
-                type="email"
-                name="employeeEmail"
-                value={form.employeeEmail}
-                onChange={handleChange}
-                required
-                className="input-field"
-                placeholder="e.g. rahul@example.com"
-              />
-            </FormField>
-            <FormField label="Designation / Role" required>
-              <input
-                type="text"
-                name="designation"
-                value={form.designation}
-                onChange={handleChange}
-                required
-                className="input-field"
-                placeholder="e.g. Software Engineer"
-              />
-            </FormField>
-            <FormField label="Joining Date" required>
-              <input
-                type="date"
-                name="joiningDate"
-                value={form.joiningDate}
-                onChange={handleChange}
-                required
-                className="input-field"
-              />
-            </FormField>
-            <div className="sm:col-span-2">
-              <FormField label="Department">
-                <input
-                  type="text"
-                  name="department"
-                  value={form.department}
-                  onChange={handleChange}
-                  className="input-field"
-                  placeholder="e.g. Engineering (optional)"
-                />
-              </FormField>
+              <div className="flex flex-col items-center gap-3">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-200 ${
+                  dragOver ? 'bg-brand-100' : 'bg-surface-100'
+                }`}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className={dragOver ? 'text-brand-600' : 'text-ink-300'}>
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <path d="M14 2v6h6" />
+                    <path d="M12 18v-6" />
+                    <path d="M9 15l3-3 3 3" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-ink-700">
+                    Drop your PDF here or <span className="text-brand-600">browse</span>
+                  </p>
+                  <p className="text-xs text-ink-400 mt-1">PDF files only, up to 20MB</p>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-
-        {/* Signing Flow Card */}
-        <div className="section-card p-6 sm:p-8">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-brand-600">
-                <path d="M8.5 1.5l4 4-8 8H1v-3.5l8-8z" />
-                <path d="M6.5 3.5l4 4" />
-              </svg>
+          ) : (
+            <div className="flex items-center gap-4 p-4 bg-surface-50 rounded-xl border border-surface-200 animate-scale-in">
+              <div className="w-12 h-12 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-red-500">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.5" />
+                  <text x="12" y="17" textAnchor="middle" fill="currentColor" fontSize="6" fontWeight="700">PDF</text>
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-ink-900 truncate">{file.name}</p>
+                <p className="text-xs text-ink-400 mt-0.5">{fileSizeMB} MB</p>
+              </div>
+              <button
+                type="button"
+                onClick={removeFile}
+                className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-ink-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M4 4l8 8M12 4l-8 8" />
+                </svg>
+              </button>
             </div>
-            <div>
-              <h2 className="text-base font-semibold text-ink-900">Signing Flow</h2>
-              <p className="text-xs text-ink-400">Sequential order — each party signs after the previous</p>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            {FIXED_PARTIES.map((party, i) => (
-              <PartyCard
-                key={i}
-                party={party}
-                index={i}
-                employeeName={form.employeeName}
-              />
-            ))}
-          </div>
+          )}
         </div>
 
         {/* Submit */}
-        <button type="submit" disabled={loading} className="btn-primary w-full py-4 text-base">
+        <button type="submit" disabled={loading || !file} className="btn-primary w-full py-4 text-base">
           {loading ? (
             <span className="flex items-center justify-center gap-3">
               <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">

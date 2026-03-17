@@ -5,7 +5,6 @@ const path = require('path');
 const config = require('./config');
 const { getAccessToken } = require('./auth');
 
-const TEMPLATE_PATH = path.join(__dirname, '..', 'templates', 'appointment_letter.docx');
 const DOWNLOADS_DIR = path.join(__dirname, '..', 'downloads');
 
 /** Build Authorization header */
@@ -38,60 +37,73 @@ async function withRetry(fn, retries = 3) {
  * @param {{ employeeName: string, employeeEmail: string, designation: string, joiningDate: string }} details
  * @returns {Promise<object>} Zoho Sign response
  */
-async function sendForSigning({ employeeName, employeeEmail, designation, joiningDate }) {
+async function sendForSigning({ employeeName, employeeEmail, filePath }) {
   const { abhishek, chetan, jagdish } = config.signers;
+
+  // For POC: employee details fall back to Chetan from .env
+  // For production: pass real employeeName/employeeEmail from the API call
+  const empName = employeeName || chetan.name;
+  const empEmail = employeeEmail || chetan.email;
+
+  const actions = [
+    {
+      recipient_name: abhishek.name,
+      recipient_email: abhishek.email,
+      action_type: 'SIGN',
+      signing_order: 0,
+      verify_recipient: true,
+      verification_type: 'EMAIL',
+    },
+    {
+      recipient_name: empName,
+      recipient_email: empEmail,
+      action_type: 'SIGN',
+      signing_order: 1,
+      verify_recipient: true,
+      verification_type: 'EMAIL',
+    },
+    // PRODUCTION: Uncomment below when Zoho plan supports 4+ recipients.
+    // Add Chetan as a separate signer (signing_order: 1) and shift employee to 2, Jagdish to 3.
+    // {
+    //   recipient_name: chetan.name,
+    //   recipient_email: chetan.email,
+    //   action_type: 'SIGN',
+    //   signing_order: 1,
+    //   verify_recipient: true,
+    //   verification_type: 'EMAIL',
+    // },
+    // {
+    //   recipient_name: employeeName,
+    //   recipient_email: employeeEmail,
+    //   action_type: 'SIGN',
+    //   signing_order: 2,
+    //   verify_recipient: true,
+    //   verification_type: 'EMAIL',
+    // },
+    // {
+    //   recipient_name: jagdish.name,
+    //   recipient_email: jagdish.email,
+    //   action_type: 'VIEW',
+    //   signing_order: 3,
+    // },
+  ];
 
   const data = {
     requests: {
-      request_name: `Appointment Letter - ${employeeName}`,
+      request_name: `Appointment Letter - ${empName}`,
       is_sequential: true,
       expiration_days: 15,
       email_reminders: true,
       reminder_period: 3,
-      notes: `Appointment letter for ${employeeName} — ${designation}, joining ${joiningDate}`,
-      actions: [
-        {
-          recipient_name: abhishek.name,
-          recipient_email: abhishek.email,
-          action_type: 'SIGN',
-          signing_order: 0,
-          verify_recipient: true,
-          verification_type: 'EMAIL',
-        },
-        // NOTE: Chetan commented out for testing — plan allows max 2 recipients.
-        // Uncomment when on a higher plan:
-        // {
-        //   recipient_name: chetan.name,
-        //   recipient_email: chetan.email,
-        //   action_type: 'SIGN',
-        //   signing_order: 1,
-        //   verify_recipient: true,
-        //   verification_type: 'EMAIL',
-        // },
-        {
-          recipient_name: employeeName,
-          recipient_email: employeeEmail,
-          action_type: 'SIGN',
-          signing_order: 1,
-          verify_recipient: true,
-          verification_type: 'EMAIL',
-        },
-        // NOTE: Jagdish (VIEW-only) removed — Zoho plan limits to 3 recipients.
-        // Uncomment below when on a plan that supports 4+ recipients:
-        // {
-        //   recipient_name: jagdish.name,
-        //   recipient_email: jagdish.email,
-        //   action_type: 'VIEW',
-        //   signing_order: 3,
-        // },
-      ],
+      notes: `Appointment letter for ${empName}`,
+      actions,
     },
   };
 
   return withRetry(async () => {
     const headers = await authHeader();
     const form = new FormData();
-    form.append('file', fs.createReadStream(TEMPLATE_PATH));
+    form.append('file', fs.createReadStream(filePath));
     form.append('data', JSON.stringify(data));
 
     console.log(`[SEND] Creating signing request for ${employeeName}...`);

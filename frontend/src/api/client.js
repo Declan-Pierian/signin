@@ -4,8 +4,16 @@ const api = axios.create({
   baseURL: '/api',
 });
 
-export async function sendForSigning(data) {
-  const res = await api.post('/send-for-signing', data);
+export async function sendForSigning({ file, employeeName, employeeEmail }) {
+  const formData = new FormData();
+  formData.append('file', file);
+  // Only append employee details when provided (production use).
+  // For POC, these are omitted and the backend falls back to .env values.
+  if (employeeName) formData.append('employeeName', employeeName);
+  if (employeeEmail) formData.append('employeeEmail', employeeEmail);
+  const res = await api.post('/send-for-signing', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return res.data;
 }
 
